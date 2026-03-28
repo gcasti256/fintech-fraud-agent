@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package fraud_scoring;
+
+service FraudScoringService {
+  // Score a single transaction for fraud
+  rpc ScoreTransaction(TransactionRequest) returns (FraudScore);
+
+  // Score a batch of transactions
+  rpc BatchScore(BatchRequest) returns (BatchResponse);
+
+  // Get a previous decision by ID
+  rpc GetDecision(DecisionRequest) returns (DecisionDetail);
+}
+
+message Location {
+  string city = 1;
+  string country = 2;
+  double latitude = 3;
+  double longitude = 4;
+}
+
+message TransactionRequest {
+  string id = 1;
+  string timestamp = 2;
+  double amount = 3;
+  string currency = 4;
+  string merchant_name = 5;
+  string merchant_category_code = 6;
+  string card_last_four = 7;
+  string account_id = 8;
+  Location location = 9;
+  string channel = 10;
+  bool is_international = 11;
+}
+
+message AccountInfo {
+  string id = 1;
+  string holder_name = 2;
+  double average_transaction_amount = 3;
+  Location typical_location = 4;
+  int32 transaction_history_count = 5;
+}
+
+message FraudScore {
+  string transaction_id = 1;
+  string risk_level = 2;
+  double fraud_score = 3;
+  bool is_fraud = 4;
+  double confidence = 5;
+  string explanation = 6;
+  repeated string rules_triggered = 7;
+  string recommended_action = 8;
+}
+
+message BatchRequest {
+  repeated TransactionRequest transactions = 1;
+  AccountInfo account = 2;
+}
+
+message BatchResponse {
+  repeated FraudScore scores = 1;
+  int32 total_processed = 2;
+  int32 flagged_count = 3;
+  double average_score = 4;
+}
+
+message DecisionRequest {
+  string transaction_id = 1;
+}
+
+message DecisionDetail {
+  FraudScore score = 1;
+  repeated string agent_trace = 2;
+  string analysis_summary = 3;
+  repeated PatternMatch pattern_matches = 4;
+}
+
+message PatternMatch {
+  string pattern_id = 1;
+  string pattern_name = 2;
+  string description = 3;
+  string risk_level = 4;
+}
