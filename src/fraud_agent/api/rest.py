@@ -15,6 +15,7 @@ from fraud_agent import __version__
 from fraud_agent.agents.orchestrator import FraudDetectionOrchestrator
 from fraud_agent.agents.state import TransactionContext
 from fraud_agent.api.schemas import (
+    AccountRequest,
     BatchRequest,
     BatchResponse,
     DecisionResponse,
@@ -86,10 +87,8 @@ def create_app() -> FastAPI:
     @app.post("/api/v1/score", response_model=FraudScoreResponse, tags=["scoring"])
     async def score_transaction(request: TransactionRequest):
         """Score a single transaction for fraud."""
-        assert _orchestrator is not None
-        assert _metrics is not None
-        assert _masker is not None
-        assert _db is not None
+        if not (_orchestrator and _metrics and _masker and _db):
+            raise HTTPException(status_code=503, detail="Service not initialized")
 
         start = time.monotonic()
 
@@ -121,9 +120,8 @@ def create_app() -> FastAPI:
     @app.post("/api/v1/batch", response_model=BatchResponse, tags=["scoring"])
     async def score_batch(request: BatchRequest):
         """Score a batch of transactions."""
-        assert _orchestrator is not None
-        assert _metrics is not None
-        assert _db is not None
+        if not (_orchestrator and _metrics and _db):
+            raise HTTPException(status_code=503, detail="Service not initialized")
 
         scores = []
         for txn_req in request.transactions:
@@ -172,7 +170,8 @@ def create_app() -> FastAPI:
         offset: int = Query(default=0, ge=0),
     ):
         """List recent fraud decisions."""
-        assert _db is not None
+        if not _db:
+            raise HTTPException(status_code=503, detail="Service not initialized")
         rows = _db.get_decisions(limit=limit, offset=offset)
         return [_row_to_decision_response(r) for r in rows]
 
@@ -183,7 +182,8 @@ def create_app() -> FastAPI:
     )
     async def get_decision(transaction_id: str):
         """Get decision detail for a specific transaction."""
-        assert _db is not None
+        if not _db:
+            raise HTTPException(status_code=503, detail="Service not initialized")
         rows = _db.get_decisions_by_transaction(transaction_id)
         if not rows:
             raise HTTPException(status_code=404, detail="Decision not found")
@@ -192,14 +192,16 @@ def create_app() -> FastAPI:
     @app.get("/api/v1/metrics", response_model=MetricsResponse, tags=["monitoring"])
     async def get_metrics():
         """Get scoring performance metrics."""
-        assert _metrics is not None
+        if not _metrics:
+            raise HTTPException(status_code=503, detail="Service not initialized")
         summary = _metrics.get_summary()
         return MetricsResponse(**summary)
 
     @app.get("/api/v1/patterns", response_model=list[PatternResponse], tags=["knowledge"])
     async def list_patterns():
         """List known fraud patterns from the knowledge base."""
-        assert _kb is not None
+        if not _kb:
+            raise HTTPException(status_code=503, detail="Service not initialized")
         patterns = _kb.get_patterns()
         return [
             PatternResponse(
@@ -255,7 +257,7 @@ def _build_default_account(request: TransactionRequest) -> Account:
     )
 
 
-def _build_account_from_request(req) -> Account:
+def _build_account_from_request(req: AccountRequest) -> Account:
     """Build account from batch request."""
     return Account(
         id=req.id,

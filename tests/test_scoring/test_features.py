@@ -1,8 +1,4 @@
-"""Tests for fraud_agent.scoring.features.FeatureExtractor.
-
-Verifies feature extraction keys, amount ratio, nighttime detection,
-MCC risk flags, channel risk values, and velocity computation.
-"""
+"""Tests for FeatureExtractor."""
 
 from __future__ import annotations
 
@@ -14,10 +10,6 @@ import pytest
 from fraud_agent.data.schemas import Account, Location, Transaction, TransactionChannel
 from fraud_agent.scoring.features import FeatureExtractor
 from tests.conftest import make_recent_transactions
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 _NY = Location(city="New York", country="US", latitude=40.7128, longitude=-74.006)
 _LA = Location(city="Los Angeles", country="US", latitude=34.0522, longitude=-118.2437)
@@ -66,11 +58,6 @@ EXPECTED_KEYS = {
     "amount_zscore",
     "channel_risk",
 }
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 class TestFeatureExtractor:

@@ -14,10 +14,6 @@ import pytest
 from fraud_agent.data.generator import TransactionGenerator
 from fraud_agent.data.schemas import Account, Location, Transaction, TransactionChannel
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture
 def gen() -> TransactionGenerator:
@@ -29,11 +25,6 @@ def gen() -> TransactionGenerator:
 def account(gen: TransactionGenerator) -> Account:
     """One synthetic account from the seeded generator."""
     return gen.generate_account()
-
-
-# ---------------------------------------------------------------------------
-# Account generation
-# ---------------------------------------------------------------------------
 
 
 class TestGenerateAccount:
@@ -65,11 +56,6 @@ class TestGenerateAccount:
         gen = TransactionGenerator(seed=42)
         acc = gen.generate_account()
         assert isinstance(acc.typical_location, Location)
-
-
-# ---------------------------------------------------------------------------
-# Normal transaction generation
-# ---------------------------------------------------------------------------
 
 
 class TestGenerateNormalTransaction:
@@ -104,11 +90,6 @@ class TestGenerateNormalTransaction:
             assert isinstance(txn.channel, TransactionChannel)
 
 
-# ---------------------------------------------------------------------------
-# Fraud transaction generation
-# ---------------------------------------------------------------------------
-
-
 class TestGenerateFraudTransaction:
     def test_generate_fraud_transaction(self, gen: TransactionGenerator, account: Account):
         """generate_transaction(is_fraud=True) returns a Transaction."""
@@ -136,11 +117,6 @@ class TestGenerateFraudTransaction:
             max_ratio = max(max_ratio, ratio)
         # The amount_anomaly pattern is 5-20x; should appear within 50 samples
         assert max_ratio >= 3.0
-
-
-# ---------------------------------------------------------------------------
-# Batch generation
-# ---------------------------------------------------------------------------
 
 
 class TestGenerateBatch:
@@ -184,11 +160,6 @@ class TestGenerateBatch:
             gen.generate_batch(count=10, fraud_rate=-0.1)
 
 
-# ---------------------------------------------------------------------------
-# Seed reproducibility
-# ---------------------------------------------------------------------------
-
-
 class TestSeedReproducibility:
     def test_seed_reproducibility(self):
         """Same seed produces identical Account output."""
@@ -218,11 +189,6 @@ class TestSeedReproducibility:
         amounts1 = [t.amount for t in b1]
         amounts2 = [t.amount for t in b2]
         assert amounts1 != amounts2
-
-
-# ---------------------------------------------------------------------------
-# Field population sanity
-# ---------------------------------------------------------------------------
 
 
 class TestFieldsPopulated:

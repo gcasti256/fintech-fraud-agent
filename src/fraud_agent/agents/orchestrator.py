@@ -46,16 +46,13 @@ class FraudDetectionOrchestrator:
         """Construct the LangGraph StateGraph for the fraud detection pipeline."""
         workflow = StateGraph(AgentState)
 
-        # Add agent nodes
         workflow.add_node("triage", self.triage.run)
         workflow.add_node("analyze", self.analyzer.run)
         workflow.add_node("decide", self.decision.run)
         workflow.add_node("auto_approve", self._auto_approve)
 
-        # Set entry point
         workflow.set_entry_point("triage")
 
-        # Conditional routing from triage
         workflow.add_conditional_edges(
             "triage",
             TriageAgent.should_analyze,
@@ -65,10 +62,7 @@ class FraudDetectionOrchestrator:
             },
         )
 
-        # Analysis always flows to decision
         workflow.add_edge("analyze", "decide")
-
-        # Terminal nodes
         workflow.add_edge("decide", END)
         workflow.add_edge("auto_approve", END)
 

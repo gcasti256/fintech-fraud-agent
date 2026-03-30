@@ -31,7 +31,7 @@ Score range Risk level
 
 from __future__ import annotations
 
-import logging
+import structlog
 
 from fraud_agent.data.schemas import Account, FraudDecision, RiskLevel, Transaction
 from fraud_agent.scoring.features import FeatureExtractor
@@ -47,11 +47,7 @@ from fraud_agent.scoring.rules import (
     VelocityRule,
 )
 
-logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Risk level thresholds
-# ---------------------------------------------------------------------------
+logger = structlog.get_logger(__name__)
 
 _CRITICAL_THRESHOLD = 0.8
 _HIGH_THRESHOLD = 0.6
@@ -168,10 +164,6 @@ class ScoringEngine:
         self._model: ScoringModel = model if model is not None else RuleBasedModel()
         self._extractor = FeatureExtractor()
 
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
-
     def score_transaction(
         self,
         transaction: Transaction,
@@ -198,9 +190,6 @@ class ScoringEngine:
         Returns:
             A :class:`~fraud_agent.data.schemas.FraudDecision` with all fields populated.
         """
-        # ----------------------------------------------------------------
-        # Step 1: Feature extraction
-        # ----------------------------------------------------------------
         try:
             features = self._extractor.extract(transaction, account, recent_transactions)
         except Exception:
@@ -210,9 +199,6 @@ class ScoringEngine:
             )
             features = {}
 
-        # ----------------------------------------------------------------
-        # Step 2: Rule evaluation
-        # ----------------------------------------------------------------
         triggered_names: list[str] = []
         triggered_scores: list[float] = []
         triggered_explanations: list[str] = []
@@ -235,9 +221,6 @@ class ScoringEngine:
                 triggered_scores.append(contribution)
                 triggered_explanations.append(explanation)
 
-        # ----------------------------------------------------------------
-        # Step 3: Model inference
-        # ----------------------------------------------------------------
         try:
             model_score = float(self._model.score(features))
             model_score = min(max(model_score, 0.0), 1.0)
@@ -248,9 +231,6 @@ class ScoringEngine:
             )
             model_score = 0.0
 
-        # ----------------------------------------------------------------
-        # Step 4: Score combination
-        # ----------------------------------------------------------------
         max_rule_score = max(triggered_scores, default=0.0)
         avg_rule_score = sum(triggered_scores) / len(triggered_scores) if triggered_scores else 0.0
 
@@ -259,9 +239,6 @@ class ScoringEngine:
         )
         final_score = min(max(combined_score, 0.0), 1.0)
 
-        # ----------------------------------------------------------------
-        # Step 5: Risk classification
-        # ----------------------------------------------------------------
         risk_level = _determine_risk_level(final_score)
         is_fraud = risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
         recommended = _recommended_action(risk_level)
@@ -271,9 +248,6 @@ class ScoringEngine:
         rule_agreement = len(triggered_names) / max(len(self._rules), 1)
         confidence = min(0.5 * final_score + 0.5 * rule_agreement, 1.0)
 
-        # ----------------------------------------------------------------
-        # Step 6: Build FraudDecision
-        # ----------------------------------------------------------------
         explanation = _build_explanation(triggered_explanations, risk_level, final_score)
 
         # The FraudDecision schema validates risk/score consistency:
@@ -334,11 +308,6 @@ class ScoringEngine:
             results.append(decision)
 
         return results
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _clamp_score_for_risk_level(score: float, risk_level: RiskLevel) -> float:

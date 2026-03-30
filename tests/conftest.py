@@ -16,10 +16,6 @@ from fraud_agent.data.schemas import (
     TransactionChannel,
 )
 
-# ---------------------------------------------------------------------------
-# Locations
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture
 def new_york_location() -> Location:
@@ -34,11 +30,6 @@ def london_location() -> Location:
 @pytest.fixture
 def tokyo_location() -> Location:
     return Location(city="Tokyo", country="JP", latitude=35.6762, longitude=139.6503)
-
-
-# ---------------------------------------------------------------------------
-# Accounts
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -63,11 +54,6 @@ def high_spender_account(new_york_location) -> Account:
         account_open_date=date(2018, 6, 15),
         transaction_history_count=500,
     )
-
-
-# ---------------------------------------------------------------------------
-# Transactions
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -138,6 +124,39 @@ def large_recent_transaction(new_york_location) -> Transaction:
     )
 
 
+def make_transaction(**overrides) -> Transaction:
+    defaults = {
+        "id": "test-txn-001",
+        "timestamp": datetime(2024, 6, 15, 14, 30),
+        "amount": Decimal("50.00"),
+        "currency": "USD",
+        "merchant_name": "Test Store",
+        "merchant_category_code": "5411",
+        "card_last_four": "1234",
+        "account_id": "ACC-0001-1234",
+        "location": Location(city="New York", country="US", latitude=40.7128, longitude=-74.006),
+        "channel": TransactionChannel.IN_STORE,
+        "is_international": False,
+    }
+    defaults.update(overrides)
+    return Transaction(**defaults)
+
+
+def make_account(**overrides) -> Account:
+    defaults = {
+        "id": "ACC-0001-1234",
+        "holder_name": "Test User",
+        "average_transaction_amount": Decimal("75.00"),
+        "typical_location": Location(
+            city="New York", country="US", latitude=40.7128, longitude=-74.006
+        ),
+        "account_open_date": date(2020, 1, 1),
+        "transaction_history_count": 100,
+    }
+    defaults.update(overrides)
+    return Account(**defaults)
+
+
 def make_recent_transactions(
     base_ts: datetime, count: int, location: Location
 ) -> list[Transaction]:
@@ -162,11 +181,6 @@ def make_recent_transactions(
             )
         )
     return txns
-
-
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from fraud_agent.config import Settings, get_settings
 
@@ -27,11 +28,11 @@ class TestSettings:
         assert settings.log_level == "DEBUG"
 
     def test_port_validation(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Settings(rest_port=0)
 
     def test_threshold_validation(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Settings(high_risk_threshold=1.5)
 
     def test_get_settings_cached(self):

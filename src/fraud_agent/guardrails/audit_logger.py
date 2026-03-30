@@ -208,5 +208,4 @@ class AuditLogger:
             with open(self.log_path, "a") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
         except OSError:
-            # In-memory only if file write fails
-            pass
+            logger.error("audit.file_write_failed", log_path=self.log_path)

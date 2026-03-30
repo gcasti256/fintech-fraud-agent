@@ -4,6 +4,8 @@ services:
     ports:
       - "8000:8000"
       - "50051:50051"
+    env_file:
+      - .env
     environment:
       - REST_HOST=0.0.0.0
       - REST_PORT=8000
@@ -12,11 +14,14 @@ services:
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
     volumes:
-      - ./data:/app/data
+      - fraud-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+volumes:
+  fraud-data:

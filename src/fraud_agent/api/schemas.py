@@ -21,14 +21,14 @@ class TransactionRequest(BaseModel):
 
     id: str | None = None
     timestamp: datetime | None = None
-    amount: float
-    currency: str = "USD"
-    merchant_name: str
-    merchant_category_code: str = "5999"
-    card_last_four: str = "0000"
-    account_id: str = "ACC-0001-0001"
+    amount: float = Field(gt=0)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    merchant_name: str = Field(min_length=1)
+    merchant_category_code: str = Field(default="5999", pattern=r"^\d{4}$")
+    card_last_four: str = Field(default="0000", pattern=r"^\d{4}$")
+    account_id: str = Field(default="ACC-0001-0001", min_length=1)
     location: LocationRequest = Field(default_factory=LocationRequest)
-    channel: str = "ONLINE"
+    channel: str = Field(default="ONLINE", pattern=r"^(ONLINE|IN_STORE|ATM|PHONE|MAIL)$")
     is_international: bool = False
 
 

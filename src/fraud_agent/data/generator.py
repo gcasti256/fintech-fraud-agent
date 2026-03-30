@@ -602,7 +602,7 @@ class TransactionGenerator:
 
     def _card_last_four(self) -> str:
         """Generate a random 4-digit card suffix."""
-        return str(int(self._rng.integers(1000, 9999)))
+        return str(int(self._rng.integers(1000, 10000)))
 
     def _weighted_channel(self) -> TransactionChannel:
         """Sample a :class:`TransactionChannel` with realistic weights.

@@ -1,17 +1,14 @@
-"""Tests for all fraud rules in fraud_agent.scoring.rules.
-
-Covers VelocityRule, AmountRule, GeographicRule, TimeRule, MerchantRule,
-TestingRule, and NewMerchantRule with trigger / no-trigger scenarios.
-"""
+"""Tests for fraud detection rules."""
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from conftest import make_account, make_recent_transactions, make_transaction
 
-from fraud_agent.data.schemas import Account, Location, Transaction, TransactionChannel
+from fraud_agent.data.schemas import Location, Transaction, TransactionChannel
 from fraud_agent.scoring.rules import (
     AmountRule,
     GeographicRule,
@@ -22,49 +19,6 @@ from fraud_agent.scoring.rules import (
     VelocityRule,
     _haversine,
 )
-from tests.conftest import make_recent_transactions
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def make_transaction(**overrides) -> Transaction:
-    defaults = {
-        "id": "test-txn-001",
-        "timestamp": datetime(2024, 6, 15, 14, 30, tzinfo=UTC),
-        "amount": Decimal("50.00"),
-        "currency": "USD",
-        "merchant_name": "Test Store",
-        "merchant_category_code": "5411",
-        "card_last_four": "1234",
-        "account_id": "ACC-0001-1234",
-        "location": Location(city="New York", country="US", latitude=40.7128, longitude=-74.006),
-        "channel": TransactionChannel.IN_STORE,
-        "is_international": False,
-    }
-    defaults.update(overrides)
-    return Transaction(**defaults)
-
-
-def make_account(**overrides) -> Account:
-    defaults = {
-        "id": "ACC-0001-1234",
-        "holder_name": "Test User",
-        "average_transaction_amount": Decimal("75.00"),
-        "typical_location": Location(
-            city="New York", country="US", latitude=40.7128, longitude=-74.006
-        ),
-        "account_open_date": date(2020, 1, 1),
-        "transaction_history_count": 100,
-    }
-    defaults.update(overrides)
-    return Account(**defaults)
-
-
-# ---------------------------------------------------------------------------
-# Haversine helper (sanity checks)
-# ---------------------------------------------------------------------------
 
 
 class TestHaversine:
@@ -72,62 +26,43 @@ class TestHaversine:
         assert _haversine(40.0, -74.0, 40.0, -74.0) == pytest.approx(0.0)
 
     def test_known_distance(self):
-        # NYC to London is approximately 5,570 km
         dist = _haversine(40.7128, -74.0060, 51.5074, -0.1278)
         assert 5500 < dist < 5600
 
 
-# ---------------------------------------------------------------------------
-# VelocityRule
-# ---------------------------------------------------------------------------
-
-
 class TestVelocityRule:
-    def test_velocity_rule_triggers(self):
-        """More than 5 recent transactions within 10 minutes triggers the rule."""
+    def test_triggers(self):
         rule = VelocityRule(threshold=5, window_minutes=10)
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         current_txn = make_transaction(id="current", timestamp=base_ts)
-
-        # 6 other transactions all within the 10-minute window
         recent = [
-            make_transaction(
-                id=f"r-{i}",
-                timestamp=base_ts - timedelta(minutes=i + 1),
-            )
+            make_transaction(id=f"r-{i}", timestamp=base_ts - timedelta(minutes=i + 1))
             for i in range(6)
         ]
-
         fired, score, explanation = rule.evaluate(current_txn, make_account(), recent)
         assert fired is True
         assert score == 0.9
         assert "transactions" in explanation
 
-    def test_velocity_rule_no_trigger(self):
-        """Fewer than threshold recent transactions does not trigger."""
+    def test_no_trigger(self):
         rule = VelocityRule(threshold=5, window_minutes=10)
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         current_txn = make_transaction(id="current", timestamp=base_ts)
-        # 3 transactions — below the threshold of 5
         recent = make_recent_transactions(base_ts, 3, current_txn.location)
-
         fired, score, _ = rule.evaluate(current_txn, make_account(), recent)
         assert fired is False
         assert score == 0.0
 
-    def test_velocity_rule_no_recent_transactions(self):
-        """No recent transactions always returns not-triggered."""
+    def test_no_recent_transactions(self):
         rule = VelocityRule()
         fired, score, _ = rule.evaluate(make_transaction(), make_account(), None)
         assert fired is False
         assert score == 0.0
 
-    def test_velocity_rule_excludes_current_transaction(self):
-        """Current transaction is not counted even if included in the list."""
+    def test_excludes_current_transaction(self):
         rule = VelocityRule(threshold=5, window_minutes=10)
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         current_txn = make_transaction(id="current", timestamp=base_ts)
-        # 5 items including current → only 4 others, below threshold
         recent = [current_txn] + [
             make_transaction(id=f"r-{i}", timestamp=base_ts - timedelta(minutes=i + 1))
             for i in range(4)
@@ -135,13 +70,12 @@ class TestVelocityRule:
         fired, _, _ = rule.evaluate(current_txn, make_account(), recent)
         assert fired is False
 
-    def test_velocity_rule_name(self):
+    def test_name(self):
         assert VelocityRule().name == "velocity_rule"
 
-    def test_above_threshold_via_conftest_helper(
+    def test_above_threshold_via_conftest(
         self, normal_transaction, default_account, new_york_location
     ):
-        """Uses conftest fixture: 8 recent transactions above threshold=5."""
         rule = VelocityRule(threshold=5)
         recent = make_recent_transactions(normal_transaction.timestamp, 8, new_york_location)
         triggered, score, explanation = rule.evaluate(normal_transaction, default_account, recent)
@@ -150,83 +84,62 @@ class TestVelocityRule:
         assert "transactions" in explanation
 
 
-# ---------------------------------------------------------------------------
-# AmountRule
-# ---------------------------------------------------------------------------
-
-
 class TestAmountRule:
-    def test_amount_rule_triggers(self):
-        """Amount > 3x account average triggers the rule."""
+    def test_triggers(self):
         rule = AmountRule(multiplier_threshold=3.0)
         account = make_account(average_transaction_amount=Decimal("50.00"))
-        txn = make_transaction(amount=Decimal("250.00"))  # 5x
-
+        txn = make_transaction(amount=Decimal("250.00"))
         fired, score, explanation = rule.evaluate(txn, account, None)
         assert fired is True
         assert score > 0.0
         assert "account average" in explanation
 
-    def test_amount_rule_no_trigger(self):
-        """Amount within 3x of account average does not trigger."""
+    def test_no_trigger(self):
         rule = AmountRule(multiplier_threshold=3.0)
         account = make_account(average_transaction_amount=Decimal("100.00"))
-        txn = make_transaction(amount=Decimal("200.00"))  # 2x
-
+        txn = make_transaction(amount=Decimal("200.00"))
         fired, score, _ = rule.evaluate(txn, account, None)
         assert fired is False
         assert score == 0.0
 
-    def test_amount_rule_exactly_at_threshold(self):
-        """Amount exactly at 3x does not trigger (strict >)."""
+    def test_exactly_at_threshold(self):
         rule = AmountRule(multiplier_threshold=3.0)
         acct = make_account(average_transaction_amount=Decimal("100.00"))
-        txn = make_transaction(amount=Decimal("300.00"))  # exactly 3.0x
-
+        txn = make_transaction(amount=Decimal("300.00"))
         fired, _, _ = rule.evaluate(txn, acct)
         assert fired is False
 
-    def test_amount_rule_risk_scales_with_ratio(self):
-        """Higher ratio produces a higher risk contribution."""
+    def test_risk_scales_with_ratio(self):
         rule = AmountRule(multiplier_threshold=3.0)
         acct = make_account(average_transaction_amount=Decimal("100.00"))
         _, low_score, _ = rule.evaluate(make_transaction(amount=Decimal("400.00")), acct)
         _, high_score, _ = rule.evaluate(make_transaction(amount=Decimal("900.00")), acct)
         assert high_score > low_score
 
-    def test_amount_rule_very_high_capped(self):
-        """Risk contribution is capped at 1.0 for extremely large amounts."""
+    def test_very_high_capped(self):
         rule = AmountRule(multiplier_threshold=3.0)
         acct = make_account(average_transaction_amount=Decimal("10.00"))
         fired, score, _ = rule.evaluate(make_transaction(amount=Decimal("100000.00")), acct)
         assert fired is True
         assert score <= 1.0
 
-    def test_amount_rule_name(self):
+    def test_name(self):
         assert AmountRule().name == "amount_rule"
 
     def test_normal_amount_with_conftest(self, normal_transaction, default_account):
-        """conftest normal_transaction ($42.50) is below 3x average ($75)."""
         rule = AmountRule()
         triggered, _, _ = rule.evaluate(normal_transaction, default_account)
         assert not triggered
 
 
-# ---------------------------------------------------------------------------
-# GeographicRule
-# ---------------------------------------------------------------------------
-
-
 class TestGeographicRule:
-    def test_geographic_rule_triggers(self):
-        """Transaction >500 miles from typical location triggers (no recent txns)."""
+    def test_triggers(self):
         rule = GeographicRule(distance_threshold_miles=500.0, time_threshold_hours=2.0)
         account = make_account(
             typical_location=Location(
                 city="New York", country="US", latitude=40.7128, longitude=-74.006
             )
         )
-        # Los Angeles is ~2450 miles from New York
         txn = make_transaction(
             location=Location(
                 city="Los Angeles", country="US", latitude=34.0522, longitude=-118.2437
@@ -237,8 +150,7 @@ class TestGeographicRule:
         assert score == 0.85
         assert "mi from typical" in explanation
 
-    def test_geographic_rule_no_trigger(self):
-        """Transaction in the same city (tiny jitter) does not trigger."""
+    def test_no_trigger(self):
         rule = GeographicRule(distance_threshold_miles=500.0)
         account = make_account(
             typical_location=Location(
@@ -251,104 +163,75 @@ class TestGeographicRule:
         fired, _, _ = rule.evaluate(txn, account, None)
         assert fired is False
 
-    def test_geographic_rule_elapsed_suppresses(
-        self, default_account, london_location, new_york_location
-    ):
-        """Enough time elapsed since last transaction suppresses the rule."""
+    def test_elapsed_suppresses(self, default_account, london_location):
         rule = GeographicRule(distance_threshold_miles=500.0, time_threshold_hours=2.0)
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
-        txn = make_transaction(
-            id="current",
-            timestamp=base_ts,
-            location=london_location,
-        )
-        # Previous transaction 3 hours ago — enough time to "travel"
+        txn = make_transaction(id="current", timestamp=base_ts, location=london_location)
         prior = make_transaction(id="prior", timestamp=base_ts - timedelta(hours=3))
         fired, _, _ = rule.evaluate(txn, default_account, [prior])
         assert not fired
 
-    def test_geographic_rule_impossible_travel_fires(
-        self, default_account, london_location, new_york_location
-    ):
-        """Impossible travel (far + very recent prior) triggers the rule."""
+    def test_impossible_travel_fires(self, default_account, london_location):
         rule = GeographicRule(distance_threshold_miles=500.0, time_threshold_hours=2.0)
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         txn = make_transaction(id="current", timestamp=base_ts, location=london_location)
-        # Prior transaction only 30 minutes ago (< 2 hour threshold)
         prior = make_transaction(id="prior", timestamp=base_ts - timedelta(minutes=30))
         fired, score, _ = rule.evaluate(txn, default_account, [prior])
         assert fired is True
         assert score > 0.0
 
-    def test_geographic_rule_close_location_with_conftest(
-        self, normal_transaction, default_account
-    ):
-        """conftest normal_transaction (same NY location as account) does not trigger."""
+    def test_close_location_with_conftest(self, normal_transaction, default_account):
         rule = GeographicRule()
         triggered, _, _ = rule.evaluate(normal_transaction, default_account)
         assert not triggered
 
-    def test_geographic_rule_name(self):
+    def test_name(self):
         assert GeographicRule().name == "geographic_rule"
 
 
-# ---------------------------------------------------------------------------
-# TimeRule
-# ---------------------------------------------------------------------------
-
-
 class TestTimeRule:
-    def test_time_rule_triggers(self):
-        """Transaction at 3 AM UTC triggers the rule."""
+    def test_triggers(self):
         rule = TimeRule(start_hour=2, end_hour=5)
         txn = make_transaction(timestamp=datetime(2024, 6, 15, 3, 0, tzinfo=UTC))
-
         fired, score, explanation = rule.evaluate(txn, make_account())
         assert fired is True
         assert score == 0.3
         assert "03:00" in explanation
 
-    def test_time_rule_no_trigger(self):
-        """Transaction at 2 PM UTC does not trigger."""
+    def test_no_trigger(self):
         rule = TimeRule(start_hour=2, end_hour=5)
         txn = make_transaction(timestamp=datetime(2024, 6, 15, 14, 0, tzinfo=UTC))
-
         fired, score, _ = rule.evaluate(txn, make_account())
         assert fired is False
         assert score == 0.0
 
-    def test_time_rule_boundary_start(self):
-        """Exactly at start_hour triggers."""
+    def test_boundary_start(self):
         rule = TimeRule(start_hour=2, end_hour=5)
         txn = make_transaction(timestamp=datetime(2024, 6, 15, 2, 0, tzinfo=UTC))
         fired, _, _ = rule.evaluate(txn, make_account())
         assert fired is True
 
-    def test_time_rule_boundary_end(self):
-        """Exactly at end_hour still triggers."""
+    def test_boundary_end(self):
         rule = TimeRule(start_hour=2, end_hour=5)
         txn = make_transaction(timestamp=datetime(2024, 6, 15, 5, 59, tzinfo=UTC))
         fired, _, _ = rule.evaluate(txn, make_account())
         assert fired is True
 
-    def test_time_rule_naive_timestamp(self):
-        """Naive timestamp at 3 AM is treated as UTC and triggers."""
+    def test_naive_timestamp(self):
         rule = TimeRule(start_hour=2, end_hour=5)
         txn = make_transaction(timestamp=datetime(2024, 6, 15, 3, 0))
         fired, _, _ = rule.evaluate(txn, make_account())
         assert fired is True
 
-    def test_time_rule_name(self):
+    def test_name(self):
         assert TimeRule().name == "time_rule"
 
     def test_daytime_no_trigger_with_conftest(self, normal_transaction, default_account):
-        """conftest normal_transaction (14:30) is outside the risky window."""
         rule = TimeRule()
         triggered, _, _ = rule.evaluate(normal_transaction, default_account)
         assert not triggered
 
     def test_nighttime_triggers_with_conftest(self, suspicious_transaction, default_account):
-        """conftest suspicious_transaction (3:00) triggers the time rule."""
         rule = TimeRule()
         triggered, score, explanation = rule.evaluate(suspicious_transaction, default_account)
         assert triggered
@@ -356,133 +239,99 @@ class TestTimeRule:
         assert "unusual hour" in explanation
 
 
-# ---------------------------------------------------------------------------
-# MerchantRule
-# ---------------------------------------------------------------------------
-
-
 class TestMerchantRule:
-    def test_merchant_rule_triggers(self):
-        """Gambling MCC 7995 triggers the merchant rule."""
+    def test_triggers(self):
         rule = MerchantRule()
         txn = make_transaction(merchant_category_code="7995")
-
         fired, score, explanation = rule.evaluate(txn, make_account())
         assert fired is True
         assert score == 0.5
         assert "Gambling" in explanation
 
-    def test_merchant_rule_no_trigger(self):
-        """Grocery MCC 5411 does not trigger the merchant rule."""
+    def test_no_trigger(self):
         rule = MerchantRule()
         txn = make_transaction(merchant_category_code="5411")
-
         fired, score, _ = rule.evaluate(txn, make_account())
         assert fired is False
         assert score == 0.0
 
-    def test_merchant_rule_crypto_triggers(self):
-        """Crypto MCC 6051 triggers the merchant rule."""
+    def test_crypto_triggers(self):
         rule = MerchantRule()
         txn = make_transaction(merchant_category_code="6051")
         fired, _, explanation = rule.evaluate(txn, make_account())
         assert fired is True
         assert "Cryptocurrency" in explanation
 
-    def test_merchant_rule_wire_transfer_triggers(self):
-        """Wire transfer MCC 4829 triggers the merchant rule."""
+    def test_wire_transfer_triggers(self):
         rule = MerchantRule()
         txn = make_transaction(merchant_category_code="4829")
         fired, _, _ = rule.evaluate(txn, make_account())
         assert fired is True
 
-    def test_merchant_rule_with_conftest_suspicious(self, suspicious_transaction, default_account):
-        """conftest suspicious_transaction (MCC 7995) triggers the merchant rule."""
+    def test_with_conftest_suspicious(self, suspicious_transaction, default_account):
         rule = MerchantRule()
         triggered, score, explanation = rule.evaluate(suspicious_transaction, default_account)
         assert triggered
         assert score == 0.5
         assert "Gambling" in explanation
 
-    def test_merchant_rule_with_conftest_normal(self, normal_transaction, default_account):
-        """conftest normal_transaction (MCC 5411) does not trigger."""
+    def test_with_conftest_normal(self, normal_transaction, default_account):
         rule = MerchantRule()
         triggered, _, _ = rule.evaluate(normal_transaction, default_account)
         assert not triggered
 
-    def test_merchant_rule_name(self):
+    def test_name(self):
         assert MerchantRule().name == "merchant_rule"
 
 
-# ---------------------------------------------------------------------------
-# TestingRule
-# ---------------------------------------------------------------------------
-
-
 class TestTestingRule:
-    def test_testing_rule_triggers(self):
-        """$1 micro-charge + recent >$500 charge within 1 hour triggers."""
+    def test_triggers(self):
         rule = TestingRule(
             small_amount_threshold=2.0, large_amount_threshold=500.0, lookback_hours=1.0
         )
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         micro_txn = make_transaction(id="micro", timestamp=base_ts, amount=Decimal("1.00"))
         large_txn = make_transaction(
-            id="large",
-            timestamp=base_ts - timedelta(minutes=30),
-            amount=Decimal("750.00"),
+            id="large", timestamp=base_ts - timedelta(minutes=30), amount=Decimal("750.00")
         )
-
         fired, score, explanation = rule.evaluate(micro_txn, make_account(), [large_txn])
         assert fired is True
         assert score == 0.95
         assert "Card testing" in explanation
 
-    def test_testing_rule_no_trigger(self):
-        """Normal $50 charge does not trigger even with recent large transactions."""
+    def test_no_trigger(self):
         rule = TestingRule(
             small_amount_threshold=2.0, large_amount_threshold=500.0, lookback_hours=1.0
         )
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         normal_txn = make_transaction(id="normal", timestamp=base_ts, amount=Decimal("50.00"))
         large_txn = make_transaction(
-            id="large",
-            timestamp=base_ts - timedelta(minutes=10),
-            amount=Decimal("800.00"),
+            id="large", timestamp=base_ts - timedelta(minutes=10), amount=Decimal("800.00")
         )
-
         fired, score, _ = rule.evaluate(normal_txn, make_account(), [large_txn])
         assert fired is False
         assert score == 0.0
 
-    def test_testing_rule_large_outside_window(self):
-        """Micro-charge without a large recent charge in the window does not trigger."""
+    def test_large_outside_window(self):
         rule = TestingRule(
             small_amount_threshold=2.0, large_amount_threshold=500.0, lookback_hours=1.0
         )
         base_ts = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
         micro_txn = make_transaction(id="micro", timestamp=base_ts, amount=Decimal("0.99"))
         old_large = make_transaction(
-            id="old-large",
-            timestamp=base_ts - timedelta(hours=2),
-            amount=Decimal("750.00"),
+            id="old-large", timestamp=base_ts - timedelta(hours=2), amount=Decimal("750.00")
         )
-
         fired, _, _ = rule.evaluate(micro_txn, make_account(), [old_large])
         assert fired is False
 
-    def test_testing_rule_no_recent_transactions(self):
-        """Micro-charge with no history does not trigger."""
+    def test_no_recent_transactions(self):
         rule = TestingRule()
         txn = make_transaction(amount=Decimal("0.99"))
         fired, score, _ = rule.evaluate(txn, make_account(), None)
         assert fired is False
         assert score == 0.0
 
-    def test_testing_rule_with_conftest(
-        self, micro_transaction, default_account, large_recent_transaction
-    ):
-        """conftest fixtures: micro_transaction + large_recent_transaction triggers."""
+    def test_with_conftest(self, micro_transaction, default_account, large_recent_transaction):
         rule = TestingRule()
         triggered, score, explanation = rule.evaluate(
             micro_transaction, default_account, [large_recent_transaction]
@@ -491,36 +340,25 @@ class TestTestingRule:
         assert score == 0.95
         assert "Card testing" in explanation
 
-    def test_testing_rule_name(self):
+    def test_name(self):
         assert TestingRule().name == "testing_rule"
 
 
-# ---------------------------------------------------------------------------
-# NewMerchantRule
-# ---------------------------------------------------------------------------
-
-
 class TestNewMerchantRule:
-    def test_new_merchant_rule_triggers(self):
-        """First-time merchant + amount >$200 triggers the rule."""
+    def test_triggers(self):
         rule = NewMerchantRule(amount_threshold=200.0)
         txn = make_transaction(
-            id="new-txn",
-            amount=Decimal("350.00"),
-            merchant_name="Brand New Electronics",
+            id="new-txn", amount=Decimal("350.00"), merchant_name="Brand New Electronics"
         )
-        # History at completely different merchants
         history = [
             make_transaction(id=f"h-{i}", merchant_name=f"Known Merchant {i}") for i in range(5)
         ]
-
         fired, score, explanation = rule.evaluate(txn, make_account(), history)
         assert fired is True
         assert score == 0.4
         assert "First-time merchant" in explanation
 
-    def test_new_merchant_rule_no_trigger_small_amount(self):
-        """First-time merchant with amount <= $200 does not trigger."""
+    def test_no_trigger_small_amount(self):
         rule = NewMerchantRule(amount_threshold=200.0)
         txn = make_transaction(amount=Decimal("150.00"), merchant_name="New Small Shop")
         history = [make_transaction(id=f"h-{i}", merchant_name=f"K{i}") for i in range(3)]
@@ -528,8 +366,7 @@ class TestNewMerchantRule:
         assert fired is False
         assert score == 0.0
 
-    def test_new_merchant_rule_no_trigger_known_merchant(self):
-        """Known merchant (in history) does not trigger even at high amount."""
+    def test_no_trigger_known_merchant(self):
         rule = NewMerchantRule(amount_threshold=200.0)
         known = "Regular Superstore"
         txn = make_transaction(amount=Decimal("500.00"), merchant_name=known)
@@ -537,29 +374,24 @@ class TestNewMerchantRule:
         fired, _, _ = rule.evaluate(txn, make_account(), history)
         assert fired is False
 
-    def test_new_merchant_rule_no_history_triggers(self):
-        """No history → every merchant is new; high amount triggers."""
+    def test_no_history_triggers(self):
         rule = NewMerchantRule(amount_threshold=200.0)
         txn = make_transaction(amount=Decimal("999.00"), merchant_name="Completely New Merchant")
         fired, score, _ = rule.evaluate(txn, make_account(), recent_transactions=None)
         assert fired is True
         assert score > 0.0
 
-    def test_new_merchant_rule_exactly_at_threshold(self):
-        """Amount exactly at threshold does not trigger (strict >)."""
+    def test_exactly_at_threshold(self):
         rule = NewMerchantRule(amount_threshold=200.0)
         txn = make_transaction(amount=Decimal("200.00"), merchant_name="New Store")
         fired, _, _ = rule.evaluate(txn, make_account(), None)
         assert fired is False
 
-    def test_new_merchant_rule_with_conftest(self, default_account, new_york_location):
-        """High-amount transaction at a never-seen merchant triggers."""
-        from datetime import datetime as dt
-
+    def test_with_conftest(self, default_account, new_york_location):
         rule = NewMerchantRule(amount_threshold=200.0)
         txn = Transaction(
             id="txn-newmerch-001",
-            timestamp=dt(2024, 6, 15, 14, 0, tzinfo=UTC),
+            timestamp=datetime(2024, 6, 15, 14, 0, tzinfo=UTC),
             amount=Decimal("350.00"),
             currency="USD",
             merchant_name="Brand New Store Never Seen",
@@ -575,5 +407,5 @@ class TestNewMerchantRule:
         assert score == 0.4
         assert "First-time merchant" in explanation
 
-    def test_new_merchant_rule_name(self):
+    def test_name(self):
         assert NewMerchantRule().name == "new_merchant_rule"

@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -7,14 +7,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-FROM base AS runtime
-
 COPY src/ src/
 COPY knowledge_base/ knowledge_base/
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir .
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin/fraud-agent /usr/local/bin/fraud-agent
+COPY --from=builder /app/src/ src/
+COPY --from=builder /app/knowledge_base/ knowledge_base/
 
 EXPOSE 8000 50051
 

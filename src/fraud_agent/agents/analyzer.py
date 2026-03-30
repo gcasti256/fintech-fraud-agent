@@ -45,15 +45,12 @@ class AnalysisAgent:
             account = Account.model_validate(state.account)
             recent = [Transaction.model_validate(t) for t in state.recent_transactions]
 
-            # Extract features for detailed analysis
             features = self.feature_extractor.extract(transaction, account, recent)
             state.feature_analysis = features
 
-            # Identify anomalies from features
             anomalies = self._detect_anomalies(features)
             state.anomaly_flags = anomalies
 
-            # RAG lookup for matching fraud patterns
             patterns = self.retriever.retrieve_for_transaction(transaction)
             state.pattern_matches = [
                 {
@@ -66,7 +63,6 @@ class AnalysisAgent:
                 for p in patterns
             ]
 
-            # Build analysis summary
             state.analysis_summary = self._build_summary(
                 features, anomalies, patterns, state.rules_triggered
             )

@@ -51,25 +51,13 @@ class DecisionAgent:
         logger.info("decision_agent.start", transaction_id=state.transaction.get("id"))
 
         try:
-            # Calculate composite fraud score
             fraud_score = self._calculate_composite_score(state)
-
-            # Determine risk level
             risk_level = self._determine_risk_level(fraud_score, state)
-
-            # Determine if fraudulent
             is_fraud = fraud_score >= self.fraud_threshold
-
-            # Calculate confidence based on evidence strength
             confidence = self._calculate_confidence(state)
-
-            # Build explanation
             explanation = self._build_explanation(state, fraud_score, is_fraud)
-
-            # Determine action
             recommended_action = ACTION_MAP.get(risk_level, "approve")
 
-            # Update state
             state.final_risk_level = risk_level
             state.final_fraud_score = round(fraud_score, 4)
             state.is_fraud = is_fraud

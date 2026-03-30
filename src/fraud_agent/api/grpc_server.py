@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from concurrent import futures
 from datetime import date, datetime
@@ -43,8 +44,6 @@ class FraudScoringServicer:
 
     def ScoreTransaction(self, request, context):
         """Score a single transaction for fraud."""
-        import time
-
         start = time.monotonic()
 
         try:
@@ -72,7 +71,7 @@ class FraudScoringServicer:
         except Exception as e:
             logger.error("grpc.score_error", error=str(e))
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Scoring error: {e}")
+            context.set_details("Internal scoring error")
             return fraud_scoring_pb2.FraudScore()
 
     def BatchScore(self, request, context):

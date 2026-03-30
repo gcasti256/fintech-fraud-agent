@@ -17,6 +17,60 @@ from fraud_agent import __version__
 
 console = Console()
 
+_RISK_COLORS: dict[str, str] = {
+    "LOW": "green",
+    "MEDIUM": "yellow",
+    "HIGH": "red",
+    "CRITICAL": "bold red",
+}
+
+
+def _dict_to_transaction(data: dict):
+    """Convert a raw dict to a Transaction domain object."""
+    from fraud_agent.data.schemas import Location, Transaction, TransactionChannel
+
+    return Transaction(
+        id=data.get("id", str(uuid.uuid4())),
+        timestamp=datetime.fromisoformat(data["timestamp"])
+        if "timestamp" in data
+        else datetime.now(),
+        amount=Decimal(str(data.get("amount", 0))),
+        currency=data.get("currency", "USD"),
+        merchant_name=data.get("merchant_name", "Unknown"),
+        merchant_category_code=data.get("merchant_category_code", "5999"),
+        card_last_four=data.get("card_last_four", "0000"),
+        account_id=data.get("account_id", "ACC-0001-0001"),
+        location=Location(
+            **data.get(
+                "location",
+                {
+                    "city": "New York",
+                    "country": "US",
+                    "latitude": 40.7128,
+                    "longitude": -74.006,
+                },
+            )
+        ),
+        channel=TransactionChannel(data.get("channel", "ONLINE")),
+        is_international=data.get("is_international", False),
+    )
+
+
+def _default_account(account_id: str, avg_amount: float = 75.0):
+    """Build a default account for CLI scoring commands."""
+    from fraud_agent.data.schemas import Account, Location
+
+    return Account(
+        id=account_id,
+        holder_name="Account Holder",
+        average_transaction_amount=Decimal(str(avg_amount)),
+        typical_location=Location(
+            city="New York", country="US", latitude=40.7128, longitude=-74.006
+        ),
+        account_open_date=date(2020, 1, 1),
+        transaction_history_count=100,
+    )
+
 
 @click.group()
 @click.version_option(version=__version__)
@@ -32,12 +86,6 @@ def score(transaction: str, account_avg: float):
     """Score a single transaction for fraud."""
     from fraud_agent.agents.orchestrator import FraudDetectionOrchestrator
     from fraud_agent.agents.state import TransactionContext
-    from fraud_agent.data.schemas import (
-        Account,
-        Location,
-        Transaction,
-        TransactionChannel,
-    )
     from fraud_agent.guardrails.pii_masker import PIIMasker
 
     try:
@@ -46,42 +94,8 @@ def score(transaction: str, account_avg: float):
         console.print(f"[red]Invalid JSON: {e}[/red]")
         sys.exit(1)
 
-    txn = Transaction(
-        id=txn_data.get("id", str(uuid.uuid4())),
-        timestamp=datetime.fromisoformat(txn_data["timestamp"])
-        if "timestamp" in txn_data
-        else datetime.now(),
-        amount=Decimal(str(txn_data.get("amount", 0))),
-        currency=txn_data.get("currency", "USD"),
-        merchant_name=txn_data.get("merchant_name", "Unknown"),
-        merchant_category_code=txn_data.get("merchant_category_code", "5999"),
-        card_last_four=txn_data.get("card_last_four", "0000"),
-        account_id=txn_data.get("account_id", "ACC-0001-0001"),
-        location=Location(
-            **txn_data.get(
-                "location",
-                {
-                    "city": "New York",
-                    "country": "US",
-                    "latitude": 40.7128,
-                    "longitude": -74.006,
-                },
-            )
-        ),
-        channel=TransactionChannel(txn_data.get("channel", "ONLINE")),
-        is_international=txn_data.get("is_international", False),
-    )
-
-    account = Account(
-        id=txn.account_id,
-        holder_name="Account Holder",
-        average_transaction_amount=Decimal(str(account_avg)),
-        typical_location=Location(
-            city="New York", country="US", latitude=40.7128, longitude=-74.006
-        ),
-        account_open_date=date(2020, 1, 1),
-        transaction_history_count=100,
-    )
+    txn = _dict_to_transaction(txn_data)
+    account = _default_account(txn.account_id, account_avg)
 
     orchestrator = FraudDetectionOrchestrator()
     context = TransactionContext(transaction=txn, account=account)
@@ -89,10 +103,7 @@ def score(transaction: str, account_avg: float):
 
     masker = PIIMasker()
 
-    # Display results
-    color = {"LOW": "green", "MEDIUM": "yellow", "HIGH": "red", "CRITICAL": "bold red"}.get(
-        decision.risk_level.value, "white"
-    )
+    color = _RISK_COLORS.get(decision.risk_level.value, "white")
 
     console.print(
         Panel.fit(
@@ -129,12 +140,6 @@ def batch(file: str, account_avg: float):
     """Score a batch of transactions from a JSON file."""
     from fraud_agent.agents.orchestrator import FraudDetectionOrchestrator
     from fraud_agent.agents.state import TransactionContext
-    from fraud_agent.data.schemas import (
-        Account,
-        Location,
-        Transaction,
-        TransactionChannel,
-    )
 
     with open(file) as f:
         transactions_data = json.load(f)
@@ -147,50 +152,12 @@ def batch(file: str, account_avg: float):
 
     with console.status("Scoring transactions..."):
         for txn_data in transactions_data:
-            txn = Transaction(
-                id=txn_data.get("id", str(uuid.uuid4())),
-                timestamp=datetime.fromisoformat(txn_data["timestamp"])
-                if "timestamp" in txn_data
-                else datetime.now(),
-                amount=Decimal(str(txn_data.get("amount", 0))),
-                merchant_name=txn_data.get("merchant_name", "Unknown"),
-                merchant_category_code=txn_data.get("merchant_category_code", "5999"),
-                card_last_four=txn_data.get("card_last_four", "0000"),
-                account_id=txn_data.get("account_id", "ACC-0001-0001"),
-                location=Location(
-                    **txn_data.get(
-                        "location",
-                        {
-                            "city": "New York",
-                            "country": "US",
-                            "latitude": 40.7128,
-                            "longitude": -74.006,
-                        },
-                    )
-                ),
-                channel=TransactionChannel(txn_data.get("channel", "ONLINE")),
-                is_international=txn_data.get("is_international", False),
-            )
-
-            account = Account(
-                id=txn.account_id,
-                holder_name="Account Holder",
-                average_transaction_amount=Decimal(str(account_avg)),
-                typical_location=Location(
-                    city="New York",
-                    country="US",
-                    latitude=40.7128,
-                    longitude=-74.006,
-                ),
-                account_open_date=date(2020, 1, 1),
-                transaction_history_count=100,
-            )
-
+            txn = _dict_to_transaction(txn_data)
+            account = _default_account(txn.account_id, account_avg)
             context = TransactionContext(transaction=txn, account=account)
             decision = orchestrator.analyze_transaction(context)
             results.append(decision)
 
-    # Summary table
     table = Table(title=f"Batch Results ({len(results)} transactions)")
     table.add_column("Transaction", style="dim")
     table.add_column("Score", justify="right")
@@ -199,9 +166,7 @@ def batch(file: str, account_avg: float):
     table.add_column("Action")
 
     for d in results:
-        color = {"LOW": "green", "MEDIUM": "yellow", "HIGH": "red", "CRITICAL": "bold red"}.get(
-            d.risk_level.value, "white"
-        )
+        color = _RISK_COLORS.get(d.risk_level.value, "white")
         table.add_row(
             d.transaction_id[:12] + "...",
             f"{d.fraud_score:.4f}",
@@ -212,12 +177,13 @@ def batch(file: str, account_avg: float):
 
     console.print(table)
 
-    flagged = sum(1 for d in results if d.is_fraud)
-    console.print(
-        f"\n[bold]Total:[/bold] {len(results)} | "
-        f"[bold]Flagged:[/bold] {flagged} | "
-        f"[bold]Rate:[/bold] {flagged / len(results):.1%}"
-    )
+    if results:
+        flagged = sum(1 for d in results if d.is_fraud)
+        console.print(
+            f"\n[bold]Total:[/bold] {len(results)} | "
+            f"[bold]Flagged:[/bold] {flagged} | "
+            f"[bold]Rate:[/bold] {flagged / len(results):.1%}"
+        )
 
 
 @cli.command()
@@ -290,12 +256,6 @@ def evaluate(file: str, account_avg: float):
     """Run evaluation on a labelled dataset and report accuracy metrics."""
     import time
 
-    from fraud_agent.data.schemas import (
-        Account,
-        Location,
-        Transaction,
-        TransactionChannel,
-    )
     from fraud_agent.scoring.engine import ScoringEngine
 
     with open(file) as f:
@@ -309,42 +269,11 @@ def evaluate(file: str, account_avg: float):
     total_latency = 0.0
 
     for entry in dataset:
-        label = entry.get("is_fraud", (entry.get("metadata") or {}).get("fraud_pattern") is not None)
-        txn = Transaction(
-            id=entry.get("id", str(uuid.uuid4())),
-            timestamp=datetime.fromisoformat(entry["timestamp"])
-            if "timestamp" in entry
-            else datetime.now(),
-            amount=Decimal(str(entry.get("amount", 0))),
-            currency=entry.get("currency", "USD"),
-            merchant_name=entry.get("merchant_name", "Unknown"),
-            merchant_category_code=entry.get("merchant_category_code", "5999"),
-            card_last_four=entry.get("card_last_four", "0000"),
-            account_id=entry.get("account_id", "ACC-0001-0001"),
-            location=Location(
-                **entry.get(
-                    "location",
-                    {
-                        "city": "New York",
-                        "country": "US",
-                        "latitude": 40.7128,
-                        "longitude": -74.006,
-                    },
-                )
-            ),
-            channel=TransactionChannel(entry.get("channel", "ONLINE")),
-            is_international=entry.get("is_international", False),
+        label = entry.get(
+            "is_fraud", (entry.get("metadata") or {}).get("fraud_pattern") is not None
         )
-        account = Account(
-            id=txn.account_id,
-            holder_name="Account Holder",
-            average_transaction_amount=Decimal(str(account_avg)),
-            typical_location=Location(
-                city="New York", country="US", latitude=40.7128, longitude=-74.006
-            ),
-            account_open_date=date(2020, 1, 1),
-            transaction_history_count=100,
-        )
+        txn = _dict_to_transaction(entry)
+        account = _default_account(txn.account_id, account_avg)
 
         start = time.monotonic()
         decision = engine.score_transaction(txn, account)
@@ -417,12 +346,7 @@ def list_patterns():
     table.add_column("Description", max_width=50)
 
     for p in all_patterns:
-        color = {
-            "high": "red",
-            "critical": "bold red",
-            "medium": "yellow",
-            "low": "green",
-        }.get(p["risk_level"].lower() if isinstance(p["risk_level"], str) else "", "white")
+        color = _RISK_COLORS.get(p["risk_level"].upper(), "white")
         table.add_row(
             p["id"],
             p["name"],
@@ -436,13 +360,13 @@ def list_patterns():
 
 @cli.command()
 def metrics():
-    """Show scoring performance metrics."""
+    """Show scoring performance metrics (alias for dashboard)."""
     from fraud_agent.monitoring.dashboard import MetricsDashboard
     from fraud_agent.monitoring.metrics import MetricsCollector
 
     collector = MetricsCollector()
-    dashboard = MetricsDashboard(collector)
-    console.print(dashboard.render_text())
+    dash = MetricsDashboard(collector)
+    console.print(dash.render_text())
 
 
 if __name__ == "__main__":

@@ -16,11 +16,6 @@ def masker():
     return PIIMasker()
 
 
-# ---------------------------------------------------------------------------
-# Card number masking
-# ---------------------------------------------------------------------------
-
-
 class TestMaskCardNumber:
     def test_mask_card_number_with_dashes(self, masker):
         """Hyphenated card number: keeps first 4 and last 4."""
@@ -50,11 +45,6 @@ class TestMaskCardNumber:
         assert result == "not-a-card"
 
 
-# ---------------------------------------------------------------------------
-# SSN masking
-# ---------------------------------------------------------------------------
-
-
 class TestMaskSSN:
     def test_mask_ssn(self, masker):
         result = masker.mask_ssn("123-45-6789")
@@ -67,11 +57,6 @@ class TestMaskSSN:
     def test_mask_ssn_no_match_unchanged(self, masker):
         result = masker.mask_ssn("hello world")
         assert result == "hello world"
-
-
-# ---------------------------------------------------------------------------
-# Account ID masking
-# ---------------------------------------------------------------------------
 
 
 class TestMaskAccountId:
@@ -92,11 +77,6 @@ class TestMaskAccountId:
         assert result == "random string"
 
 
-# ---------------------------------------------------------------------------
-# Email masking
-# ---------------------------------------------------------------------------
-
-
 class TestMaskEmail:
     def test_mask_email(self, masker):
         result = masker.mask_email("george@example.com")
@@ -113,11 +93,6 @@ class TestMaskEmail:
     def test_mask_email_no_match_unchanged(self, masker):
         result = masker.mask_email("not an email")
         assert result == "not an email"
-
-
-# ---------------------------------------------------------------------------
-# mask_text
-# ---------------------------------------------------------------------------
 
 
 class TestMaskText:
@@ -158,11 +133,6 @@ class TestMaskText:
         assert "bob@" not in result
 
 
-# ---------------------------------------------------------------------------
-# mask_dict
-# ---------------------------------------------------------------------------
-
-
 class TestMaskDict:
     def test_mask_dict(self, masker):
         data = {
@@ -190,11 +160,6 @@ class TestMaskDict:
             assert "@example.com" in email
             assert "alice@" not in email
             assert "bob@" not in email
-
-
-# ---------------------------------------------------------------------------
-# mask_transaction
-# ---------------------------------------------------------------------------
 
 
 class TestMaskTransaction:

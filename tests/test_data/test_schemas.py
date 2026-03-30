@@ -1,8 +1,4 @@
-"""Tests for fraud_agent.data.schemas — all Pydantic models.
-
-Comprehensive test coverage for Location, Transaction, TransactionChannel,
-RiskLevel, Account, and FraudDecision.
-"""
+"""Tests for Pydantic data schemas."""
 
 from __future__ import annotations
 
@@ -21,10 +17,6 @@ from fraud_agent.data.schemas import (
     Transaction,
     TransactionChannel,
 )
-
-# ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
 
 
 def _loc(**kw) -> Location:
@@ -79,11 +71,6 @@ def _decision(**kw) -> FraudDecision:
     return FraudDecision(**base)
 
 
-# ---------------------------------------------------------------------------
-# Location
-# ---------------------------------------------------------------------------
-
-
 class TestLocation:
     def test_location_creation(self):
         """Basic Location creation with all required fields."""
@@ -113,9 +100,8 @@ class TestLocation:
             _loc(longitude=-181.0)
 
     def test_frozen(self):
-        """Location model is frozen — mutation raises an error."""
         loc = _loc()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             loc.city = "Boston"  # type: ignore[misc]
 
     def test_country_min_length(self):
@@ -141,11 +127,6 @@ class TestLocation:
         w = _loc(longitude=-180.0)
         assert e.longitude == 180.0
         assert w.longitude == -180.0
-
-
-# ---------------------------------------------------------------------------
-# Transaction
-# ---------------------------------------------------------------------------
 
 
 class TestTransaction:
@@ -234,11 +215,6 @@ class TestTransaction:
         assert parsed["card_last_four"] == "1234"
 
 
-# ---------------------------------------------------------------------------
-# TransactionChannel enum
-# ---------------------------------------------------------------------------
-
-
 class TestTransactionChannelEnum:
     def test_transaction_channel_enum_online(self):
         assert TransactionChannel.ONLINE == "ONLINE"
@@ -258,11 +234,6 @@ class TestTransactionChannelEnum:
         assert values == {"ONLINE", "IN_STORE", "ATM", "MOBILE"}
 
 
-# ---------------------------------------------------------------------------
-# RiskLevel enum
-# ---------------------------------------------------------------------------
-
-
 class TestRiskLevelEnum:
     def test_risk_level_low(self):
         assert RiskLevel.LOW == "LOW"
@@ -280,11 +251,6 @@ class TestRiskLevelEnum:
         """All four risk levels are represented."""
         values = {r.value for r in RiskLevel}
         assert values == {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
-
-
-# ---------------------------------------------------------------------------
-# FraudDecision
-# ---------------------------------------------------------------------------
 
 
 class TestFraudDecision:
@@ -371,11 +337,6 @@ class TestFraudDecision:
         assert parsed["transaction_id"] == "txn-abc-001"
         assert parsed["rules_triggered"] == ["velocity_rule"]
         assert parsed["agent_trace"] == ["triage"]
-
-
-# ---------------------------------------------------------------------------
-# Account
-# ---------------------------------------------------------------------------
 
 
 class TestAccount:

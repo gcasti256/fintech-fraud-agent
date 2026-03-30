@@ -19,9 +19,9 @@ def main():
         json.dump(data, f, indent=2, default=str)
 
     # Print summary
-    fraud_count = sum(1 for t in transactions if t.is_international)
+    international_count = sum(1 for t in transactions if t.is_international)
     print(f"Generated {len(transactions)} transactions")
-    print(f"International: {fraud_count}")
+    print(f"International: {international_count}")
     print(f"Written to: sample_transactions.json")
 
     # Show first few

@@ -23,10 +23,6 @@ from datetime import UTC, timedelta
 
 from fraud_agent.data.schemas import Account, Transaction
 
-# ---------------------------------------------------------------------------
-# High-risk MCC catalogue
-# ---------------------------------------------------------------------------
-
 #: Mapping of high-risk Merchant Category Codes to human-readable names.
 HIGH_RISK_MCC: dict[str, str] = {
     "7995": "Gambling / Betting",
@@ -38,11 +34,6 @@ HIGH_RISK_MCC: dict[str, str] = {
     "5962": "Direct Marketing – Travel",
     "6211": "Securities / Commodity Brokers",
 }
-
-
-# ---------------------------------------------------------------------------
-# Haversine helper (module-level, shared by geographic rule)
-# ---------------------------------------------------------------------------
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

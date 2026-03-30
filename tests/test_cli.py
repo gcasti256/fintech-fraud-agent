@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 
 from click.testing import CliRunner
 
@@ -50,10 +49,9 @@ class TestCLI:
         data = json.loads(result.output)
         assert len(data) == 5
 
-    def test_generate_to_file(self):
+    def test_generate_to_file(self, tmp_path):
         runner = CliRunner()
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            path = f.name
+        path = str(tmp_path / "output.json")
         result = runner.invoke(cli, ["generate", "-n", "3", "-o", path])
         assert result.exit_code == 0
         with open(path) as f:
@@ -71,30 +69,7 @@ class TestCLI:
         result = runner.invoke(cli, ["metrics"])
         assert result.exit_code == 0
 
-    def test_cli_version(self):
-        """--version outputs the package version (alias for test_version)."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["--version"])
-        assert result.exit_code == 0
-        assert "0.1.0" in result.output
-
-    def test_cli_generate(self):
-        """generate creates the requested number of transactions (alias for test_generate_command)."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["generate", "-n", "3", "-s", "0"])
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert len(data) == 3
-
-    def test_cli_patterns_list(self):
-        """patterns list shows fraud patterns (alias for test_patterns_list)."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["patterns", "list"])
-        assert result.exit_code == 0
-        assert "Fraud Patterns" in result.output
-
     def test_generate_transaction_has_required_fields(self):
-        """Generated transactions each have id, amount, merchant_name, and channel."""
         runner = CliRunner()
         result = runner.invoke(cli, ["generate", "-n", "2", "-s", "11"])
         assert result.exit_code == 0
@@ -106,7 +81,6 @@ class TestCLI:
             assert "channel" in txn
 
     def test_patterns_list_shows_pattern_names(self):
-        """patterns list output includes at least one known pattern name."""
         runner = CliRunner()
         result = runner.invoke(cli, ["patterns", "list"])
         assert result.exit_code == 0
